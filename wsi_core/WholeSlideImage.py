@@ -89,10 +89,23 @@ class WholeSlideImage(object):
         save_pkl(mask_file, asset_dict)
 
     def segmentTissue(self, seg_level=0, sthresh=20, sthresh_up = 255, mthresh=7, close = 0, use_otsu=False, 
-                            filter_params={'a_t':100}, ref_patch_size=512, exclude_ids=[], keep_ids=[]):
+                            filter_params={'a_t':100}, ref_patch_size=512, exclude_ids=[], keep_ids=[], debug_dir= "debug"):
         """
             Segment the tissue via HSV -> Median thresholding -> Binary threshold
         """
+        def crop_to_content(image, binary_mask=None):
+            if binary_mask is None:
+                # Create grayscale and threshold to generate a basic mask
+                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if len(image.shape) == 3 else image
+                _, binary_mask = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
+            coords = cv2.findNonZero(binary_mask)
+            x, y, w, h = cv2.boundingRect(coords)
+            return image[y:y+h, x:x+w], (x, y, w, h) 
+
+        def adjust_gamma(image, gamma=1.0):
+            table = np.array([((i / 255.0) ** gamma) * 255
+                            for i in np.arange(256)]).astype("uint8")
+            return cv2.LUT(image, table)
         
         def _filter_contours(contours, hierarchy, filter_params):
             """
@@ -143,9 +156,19 @@ class WholeSlideImage(object):
             return foreground_contours, hole_contours
         
         img = np.array(self.wsi.read_region((0,0), seg_level, self.level_dim[seg_level]))
-        img_hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)  # Convert to HSV space
-        img_med = cv2.medianBlur(img_hsv[:,:,1], mthresh)  # Apply median blurring
+        cv2.imwrite(os.path.join(debug_dir, "00_original.png"), cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         
+        img_gamma = adjust_gamma(img, gamma=5.0)
+        cv2.imwrite(os.path.join(debug_dir, "00_gamma_corrected.png"), cv2.cvtColor(img_gamma, cv2.COLOR_BGR2RGB))
+        
+        img_hsv = cv2.cvtColor(img_gamma, cv2.COLOR_RGB2HSV)  # Convert to HSV space
+        cv2.imwrite(os.path.join(debug_dir, "01_s_channel.png"), img_hsv[:,:,1])
+        
+        img_hsv_cropped, crop_rect = crop_to_content(img_hsv[:,:,1])
+        cv2.imwrite(os.path.join(debug_dir, "01_s_cropped.png"), img_hsv_cropped)
+        
+        img_med = cv2.medianBlur(img_hsv_cropped, mthresh)  # Apply median blurring
+        cv2.imwrite(os.path.join(debug_dir, "02_median_blur.png"), img_med)
        
         # Thresholding
         if use_otsu:
@@ -153,11 +176,14 @@ class WholeSlideImage(object):
         else:
             _, img_otsu = cv2.threshold(img_med, sthresh, sthresh_up, cv2.THRESH_BINARY)
 
+        cv2.imwrite(os.path.join(debug_dir, "03_threshold.png"), img_otsu)
+        
         # Morphological closing
         if close > 0:
             kernel = np.ones((close, close), np.uint8)
             img_otsu = cv2.morphologyEx(img_otsu, cv2.MORPH_CLOSE, kernel)                 
-
+            cv2.imwrite(os.path.join(debug_dir, "04_morph_close.png"), img_otsu)
+            
         scale = self.level_downsamples[seg_level]
         scaled_ref_patch_area = int(ref_patch_size**2 / (scale[0] * scale[1]))
         filter_params = filter_params.copy()
@@ -168,7 +194,7 @@ class WholeSlideImage(object):
         contours, hierarchy = cv2.findContours(img_otsu, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE) # Find contours 
         hierarchy = np.squeeze(hierarchy, axis=(0,))[:, 2:]
         if filter_params: foreground_contours, hole_contours = _filter_contours(contours, hierarchy, filter_params)  # Necessary for filtering out artifacts
-
+        
         self.contours_tissue = self.scaleContourDim(foreground_contours, scale)
         self.holes_tissue = self.scaleHolesDim(hole_contours, scale)
 

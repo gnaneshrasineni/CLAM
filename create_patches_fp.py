@@ -47,9 +47,9 @@ def patching(WSI_object, **kwargs):
 
 def seg_and_patch(source, save_dir, patch_save_dir, mask_save_dir, stitch_save_dir, 
 				  patch_size = 256, step_size = 256, 
-				  seg_params = {'seg_level': -1, 'sthresh': 8, 'mthresh': 7, 'close': 4, 'use_otsu': False,
+				  seg_params = {'seg_level': -1, 'sthresh': 8, 'mthresh': 7, 'close': 7, 'use_otsu': True,
 				  'keep_ids': 'none', 'exclude_ids': 'none'},
-				  filter_params = {'a_t':100, 'a_h': 16, 'max_n_holes':8}, 
+				  filter_params = {'a_t':5, 'a_h': 16, 'max_n_holes':8}, 
 				  vis_params = {'vis_level': -1, 'line_thickness': 500},
 				  patch_params = {'use_padding': True, 'contour_fn': 'four_pt'},
 				  patch_level = 0,
@@ -182,6 +182,8 @@ def seg_and_patch(source, save_dir, patch_save_dir, mask_save_dir, stitch_save_d
 
 		df.loc[idx, 'vis_level'] = current_vis_params['vis_level']
 		df.loc[idx, 'seg_level'] = current_seg_params['seg_level']
+		current_seg_params['debug_dir'] = os.path.join(debug_save_dir, slide_id)
+		os.makedirs(current_seg_params['debug_dir'], exist_ok=True)
 
 
 		seg_time_elapsed = -1
@@ -253,6 +255,7 @@ if __name__ == '__main__':
 	patch_save_dir = os.path.join(args.save_dir, 'patches')
 	mask_save_dir = os.path.join(args.save_dir, 'masks')
 	stitch_save_dir = os.path.join(args.save_dir, 'stitches')
+	debug_save_dir = os.path.join(args.save_dir, 'debug')
 
 	if args.process_list:
 		process_list = os.path.join(args.save_dir, args.process_list)
@@ -264,6 +267,7 @@ if __name__ == '__main__':
 	print('patch_save_dir: ', patch_save_dir)
 	print('mask_save_dir: ', mask_save_dir)
 	print('stitch_save_dir: ', stitch_save_dir)
+	print('stitch_save_dir: ', debug_save_dir)
 	
 	directories = {'source': args.source, 
 				   'save_dir': args.save_dir,
@@ -276,9 +280,9 @@ if __name__ == '__main__':
 		if key not in ['source']:
 			os.makedirs(val, exist_ok=True)
 
-	seg_params = {'seg_level': -1, 'sthresh': 8, 'mthresh': 7, 'close': 4, 'use_otsu': False,
+	seg_params = {'seg_level': -1, 'sthresh': 8, 'mthresh': 7, 'close': 4, 'use_otsu': True,
 				  'keep_ids': 'none', 'exclude_ids': 'none'}
-	filter_params = {'a_t':100, 'a_h': 16, 'max_n_holes':8}
+	filter_params = {'a_t':5, 'a_h': 16, 'max_n_holes':8}
 	vis_params = {'vis_level': -1, 'line_thickness': 250}
 	patch_params = {'use_padding': True, 'contour_fn': 'four_pt'}
 
